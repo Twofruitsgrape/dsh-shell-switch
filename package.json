@@ -1,0 +1,41 @@
+{
+  "name": "dsh-shell-switch",
+  "version": "1.0.0",
+  "description": "Switch DeepSeek Harness between the PowerShell and Bash shell stacks on Windows via a single config flag. · 用一个开关在 DeepSeek Harness 里切换 PowerShell / Bash。",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Twofruitsgrape/dsh-shell-switch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Twofruitsgrape/dsh-shell-switch/issues"
+  },
+  "homepage": "https://github.com/Twofruitsgrape/dsh-shell-switch#readme",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek",
+    "harness",
+    "shell",
+    "bash",
+    "powershell",
+    "pwsh",
+    "windows"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "dsh": ">=0.2.0-rc.2"
+  },
+  "scripts": {
+    "test": "node test/shell-switch.test.mjs && node test/composition.test.mjs"
+  },
+  "devDependencies": {
+    "js-yaml": "^5.4.3"
+  }
+}
