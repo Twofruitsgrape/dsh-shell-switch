@@ -1,0 +1,6 @@
+# Keep the patch and tests byte-stable across platforms. CRLF endings change
+# how the !!js expression bodies are read back, so pin LF explicitly.
+*.yml text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf

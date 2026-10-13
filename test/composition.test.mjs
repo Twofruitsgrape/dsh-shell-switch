@@ -48,7 +48,8 @@ function jsBody(id) {
   const start = src.findIndex((l) => l.trim() === `- id: ${id}`);
   if (start < 0) throw new Error(`row not found: ${id}`);
   for (let i = start + 1; i < start + 8 && i < src.length; i++) {
-    const m = src[i].match(/^\s*disabled:\s*!!js\s+(.+)$/);
+    // Tolerate CRLF: Git may check the patch out with CRLF endings on Windows.
+    const m = src[i].match(/^\s*disabled:\s*!!js\s+(.+?)\r?$/);
     if (m) return m[1].trim();
   }
   throw new Error(`no !!js disabled for ${id}`);

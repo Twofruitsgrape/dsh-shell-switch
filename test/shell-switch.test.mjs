@@ -50,7 +50,8 @@ function rawJsBody(id, field = 'disabled') {
   const rowStart = lines.findIndex((l) => l.trim() === `- id: ${id}`);
   if (rowStart < 0) throw new Error(`row not found: ${id}`);
   for (let i = rowStart + 1; i < rowStart + 8 && i < lines.length; i++) {
-    const m = lines[i].match(new RegExp(`^\\s*${field}:\\s*!!js\\s+(.+)$`));
+    // Tolerate CRLF: Git may check the patch out with CRLF endings on Windows.
+    const m = lines[i].match(new RegExp(`^\\s*${field}:\\s*!!js\\s+(.+?)\\r?$`));
     if (m) return m[1].trim();
   }
   throw new Error(`!!js ${field} not found for row: ${id}`);
