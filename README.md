@@ -38,35 +38,55 @@ The plugin manager runs package installation and bundle selection itself — do 
 
 ## Usage
 
-Set one variable **before launching** DeepSeek Harness:
+The bundle needs to know **where Git Bash lives on your machine**. Point it at
+the Git-Bash `bin` directory (or directly at `bash.exe`):
 
 ```powershell
-# Windows — Bash (the default when unset)
-$env:DSH_SHELL = "bash"
+# Windows — tell the plugin where Git Bash is, then launch
+$env:DSH_BASH_DIR = "C:\Program Files\Git\bin"
 & "C:\Users\ALICE\AppData\Local\Programs\DeepSeek Harness\DeepSeek Harness.exe"
 ```
 
-```powershell
-# Windows — PowerShell
-$env:DSH_SHELL = "powershell"
-& "C:\Users\ALICE\AppData\Local\Programs\DeepSeek Harness\DeepSeek Harness.exe"
-```
+On load the plugin verifies the directory actually contains `bash.exe`. If it
+does, the bash stack is mounted and that directory is prepended to `PATH` so the
+executor's `bash` lookup finds Git Bash instead of the WSL stub. If the directory
+is missing or invalid, the plugin safely falls back to PowerShell and logs a
+warning — it never leaves you with a broken shell.
 
-| `DSH_SHELL` | Active stack |
+| Variable | Meaning |
 |---|---|
-| unset | bash |
-| `bash` | bash |
-| `powershell` / `pwsh` | PowerShell |
+| `DSH_BASH_DIR` (set) | Use the bash at this directory/exe; validate it first |
+| `DSH_SHELL=bash` | Force bash (falls back to PowerShell if none is valid) |
+| `DSH_SHELL=powershell` / `pwsh` | Force PowerShell — switch back any time |
+| neither set | `auto`: bash if one is valid/found on `PATH`, else PowerShell |
 
-Values are case-insensitive.
+Both rows of a stack read the same resolved value, so a partial switch (which
+makes the profile fail to load) is structurally impossible.
 
 ### Persisting the choice
 
 ```powershell
-[Environment]::SetEnvironmentVariable('DSH_SHELL', 'bash', 'User')
+[Environment]::SetEnvironmentVariable('DSH_BASH_DIR', 'C:\Program Files\Git\bin', 'User')
 ```
 
-## What it changes
+### Why a directory instead of auto-detection
+
+Earlier versions guessed Git's location by probing `C:\Program Files` and
+rewriting `PATH`. That is fragile: it can shadow a WSL bash you actually wanted,
+or silently do nothing when Git is installed elsewhere. Handing the plugin an
+explicit directory is deterministic and obvious — you always know which bash is
+in use.
+
+## How it works
+
+`cordis.patch.yml` hands the four shell rows an expressions that reads a single
+resolved variable, `DSH_SHELL_EFFECTIVE`. The bundle's JavaScript module
+(`index.js`) is evaluated **before** the patch is interpolated: it validates
+`DSH_BASH_DIR` (or a `DSH_SHELL` force), resolves the directory of a usable
+`bash`, prepends it to `PATH` when needed, and publishes the final choice as
+`DSH_SHELL_EFFECTIVE`. Keeping the filesystem access in a real module (rather
+than a one-line `!!js` expression) is why the plugin can verify the directory
+instead of blindly trusting it.
 
 | Row | Package | Role |
 |---|---|---|
@@ -75,12 +95,19 @@ Values are case-insensitive.
 | `pwsh-sandbox` | `@deepseek-ai/dsh-pwsh-sandbox` | PowerShell executor |
 | `tool-pwsh` | `@deepseek-ai/dsh-tool-pwsh` | Model-facing `pwsh` tool |
 
-Exactly one stack is active at any time. Both rows of a stack share the same expression, so a partial switch (which would fail the profile load) is structurally impossible.
+Exactly one stack is active at any time. Both rows of a stack read the same
+variable, so a partial switch (which makes the profile fail to load) is
+structurally impossible.
 
 ## Caveats
 
-- **A Bash stack on Windows still needs a Bash binary on `PATH`.** The executor resolves `bash` from `PATH`. Git for Windows provides `C:\Program Files\Git\bin\bash.exe` — note that `Git\cmd` (often on `PATH`) contains only `git.exe`, *not* `bash.exe`.
-- **Beware `WindowsApps\bash.exe`.** It is a WSL stub, not Git Bash. If it precedes `Git\bin` on `PATH`, commands run under WSL rather than MSYS2. Put `C:\Program Files\Git\bin` first to get Git Bash (`uname -s` → `MINGW64_NT-*`); WSL reports `Linux`.
+- **You point the plugin at Git Bash; it does not install one.** Install Git for
+  Windows first, then set `DSH_BASH_DIR` to its `bin` directory.
+- **Beware `WindowsApps\bash.exe` / `system32\bash.exe`.** These are WSL stubs,
+  not Git Bash (`uname -s` reports `Linux`). When the plugin injects your
+  `DSH_BASH_DIR` it is prepended *ahead* of those, so the executor prefers Git
+  Bash. If you leave `DSH_BASH_DIR` unset and rely on PATH auto-detection, a WSL
+  stub may win — that still runs bash, just not the MSYS2 one.
 - **Permissions are untouched.** This bundle changes only which shell stack is mounted.
 
 ## Tests
@@ -90,7 +117,10 @@ npm install
 npm test
 ```
 
-29 assertions covering: patch structure, per-stack row coherence, the exactly-one-stack-active invariant across 8 env scenarios, and the bundle contract in `package.json`.
+60+ assertions across three suites: patch structure, per-stack row coherence,
+the exactly-one-stack-active invariant over 8 env scenarios, composition against
+the real shipped base-bundle rows, and the bash-resolution module (unit-tested
+against fixtures that isolate the host from its own PATH).
 
 ## License
 
@@ -120,14 +150,34 @@ git clone https://github.com/Twofruitsgrape/dsh-shell-switch
 
 ### 用法
 
-启动 DeepSeek Harness **之前**设置：
+插件需要知道 **Git Bash 在你机器上的位置**。把它指向 Git Bash 的 `bin` 目录（或直接指向 `bash.exe`）：
 
 ```powershell
-$env:DSH_SHELL = "bash"        # 默认（未设置时也是 bash）
-$env:DSH_SHELL = "powershell"  # 切回 PowerShell
+# 告诉插件 Git Bash 在哪, 然后启动
+$env:DSH_BASH_DIR = "C:\Program Files\Git\bin"
+& "C:\Users\ALICE\AppData\Local\Programs\DeepSeek Harness\DeepSeek Harness.exe"
 ```
 
-大小写不敏感，`pwsh` 亦可。
+加载时插件会**校验**该目录是否真有 `bash.exe`。有效 → 挂载 bash 栈并把该目录前置到 `PATH`（让执行器优先用 Git Bash 而非 WSL 占位）；无效/缺失 → 安全退回 PowerShell 并打印警告，**绝不会让你卡在坏掉的 shell**。
+
+| 变量 | 含义 |
+|---|---|
+| 设 `DSH_BASH_DIR` | 用此目录/exe 下的 bash，先校验 |
+| `DSH_SHELL=bash` | 强制 bash（无有效 bash 时退回 PowerShell） |
+| `DSH_SHELL=powershell` / `pwsh` | 强制 PowerShell —— 随时切回 |
+| 都不设 | `auto`：有有效 bash 或用 PATH 检测到则 bash，否则 PowerShell |
+
+同一栈的两行共用同一解析值，所以「部分切换导致 profile 加载失败」在结构上不可能。
+
+### 持久化
+
+```powershell
+[Environment]::SetEnvironmentVariable('DSH_BASH_DIR', 'C:\Program Files\Git\bin', 'User')
+```
+
+### 为什么用「填目录」而不是自动探测
+
+早期版本靠猜 Git 位置 + 重写 PATH，很脆：可能把你想要的 WSL bash 盖掉，或在 Git 装在别处时静默失效。显式给目录是确定且透明的——你始终知道用的是哪个 bash。
 
 ### 注意事项
 

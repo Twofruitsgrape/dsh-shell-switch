@@ -36,18 +36,28 @@ function evalJsBody(body, env) {
   return new Function('process', `return (${body})`)(sandboxProcess);
 }
 
-/** js-yaml cannot eval !!js, so strip the tag and keep the raw expression body. */
+/** js-yaml cannot eval !!js, so strip the tag and keep the raw expression body.
+ *  Supports a flat list, an `insert:` block, or `- insert:` (a list item whose
+ *  value is an insert block) — the last matches how dsh-comsol ships. */
 function loadPatch() {
   const src = readFileSync(patchPath, 'utf8');
   const stripped = src.replace(/!!js\s+/g, '');
-  return yaml.load(stripped);
+  const doc = yaml.load(stripped);
+  const top = Array.isArray(doc) ? doc : doc && Array.isArray(doc.insert) ? doc.insert : [];
+  const rows = [];
+  for (const item of top) {
+    if (item && Array.isArray(item.insert)) rows.push(...item.insert);
+    else if (item) rows.push(item);
+  }
+  return rows;
 }
 
 /** Pull the raw `!!js` expression body for a given row id out of the source. */
 function rawJsBody(id, field = 'disabled') {
   const src = readFileSync(patchPath, 'utf8');
   const lines = src.split('\n');
-  const rowStart = lines.findIndex((l) => l.trim() === `- id: ${id}`);
+  const rowRe = new RegExp(`^\\s*-?\\s*id:\\s*${id}\\s*$`); // works inside insert: blocks too
+  const rowStart = lines.findIndex((l) => rowRe.test(l));
   if (rowStart < 0) throw new Error(`row not found: ${id}`);
   for (let i = rowStart + 1; i < rowStart + 8 && i < lines.length; i++) {
     // Tolerate CRLF: Git may check the patch out with CRLF endings on Windows.
@@ -92,19 +102,19 @@ check('bash-sandbox and tool-bash share one expression', bashExpr === toolBashEx
 check('pwsh-sandbox and tool-pwsh share one expression', pwshExpr === toolPwshExpr);
 check('the two stacks use complementary expressions', bashExpr !== pwshExpr);
 
-console.log('\n== 3. Switch behaviour ==');
+console.log('\n== 3. Patch expression behaviour (reads DSH_SHELL_EFFECTIVE) ==');
+// The bundle module (index.js) resolves DSH_SHELL / DSH_BASH_DIR and publishes
+// the final choice as DSH_SHELL_EFFECTIVE. This section verifies the patch
+// expressions read that variable correctly.
 const bashBody = rawJsBody('bash-sandbox');
 const pwshBody = rawJsBody('pwsh-sandbox');
 
 const scenarios = [
-  { env: {}, want: 'bash', label: 'DSH_SHELL unset -> bash (default)' },
-  { env: { DSH_SHELL: 'bash' }, want: 'bash', label: 'DSH_SHELL=bash -> bash' },
-  { env: { DSH_SHELL: 'BASH' }, want: 'bash', label: 'DSH_SHELL=BASH -> bash (case-insensitive)' },
-  { env: { DSH_SHELL: 'Bash' }, want: 'bash', label: 'DSH_SHELL=Bash -> bash' },
-  { env: { DSH_SHELL: 'powershell' }, want: 'powershell', label: 'DSH_SHELL=powershell -> powershell' },
-  { env: { DSH_SHELL: 'PowerShell' }, want: 'powershell', label: 'DSH_SHELL=PowerShell -> powershell' },
-  { env: { DSH_SHELL: 'pwsh' }, want: 'powershell', label: 'DSH_SHELL=pwsh -> powershell (alias)' },
-  { env: { DSH_SHELL: 'PWSH' }, want: 'powershell', label: 'DSH_SHELL=PWSH -> powershell' },
+  { env: { DSH_SHELL_EFFECTIVE: 'bash' }, want: 'bash', label: 'EFFECTIVE=bash -> bash' },
+  { env: { DSH_SHELL_EFFECTIVE: 'BASH' }, want: 'bash', label: 'EFFECTIVE=BASH -> bash (case-insensitive)' },
+  { env: { DSH_SHELL_EFFECTIVE: 'powershell' }, want: 'powershell', label: 'EFFECTIVE=powershell -> powershell' },
+  { env: { DSH_SHELL_EFFECTIVE: 'PWSH' }, want: 'powershell', label: 'EFFECTIVE=PWSH -> powershell' },
+  { env: {}, want: 'powershell', label: 'EFFECTIVE unset -> powershell (safe default)' },
 ];
 
 for (const s of scenarios) {

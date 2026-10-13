@@ -42,10 +42,11 @@ function baseDisabled(row, platform) {
   return Boolean(row.disabled);
 }
 
-/** Read this bundle's !!js expression body for a row. */
+/** Read this bundle's !!js expression body for a row (handles insert: blocks). */
 function jsBody(id) {
   const src = readFileSync(join(root, 'cordis.patch.yml'), 'utf8').split('\n');
-  const start = src.findIndex((l) => l.trim() === `- id: ${id}`);
+  const rowRe = new RegExp(`^\\s*-?\\s*id:\\s*${id}\\s*$`);
+  const start = src.findIndex((l) => rowRe.test(l));
   if (start < 0) throw new Error(`row not found: ${id}`);
   for (let i = start + 1; i < start + 8 && i < src.length; i++) {
     // Tolerate CRLF: Git may check the patch out with CRLF endings on Windows.
@@ -83,11 +84,15 @@ console.log('\n== 1. Base bundle alone on Windows (the problem) ==');
 }
 
 console.log('\n== 2. Base + this bundle, composed per dsh order ==');
+// The bundle module publishes the resolved choice as DSH_SHELL_EFFECTIVE
+// (a plain lowercase value); the patch reads that. Here we assert the patch
+// rows, composed over the base bundle, yield the expected active stack for
+// each resolved value.
 const scenarios = [
-  { env: {}, want: 'bash', label: 'DSH_SHELL unset' },
-  { env: { DSH_SHELL: 'bash' }, want: 'bash', label: 'DSH_SHELL=bash' },
-  { env: { DSH_SHELL: 'powershell' }, want: 'powershell', label: 'DSH_SHELL=powershell' },
-  { env: { DSH_SHELL: 'pwsh' }, want: 'powershell', label: 'DSH_SHELL=pwsh' },
+  { env: {}, want: 'powershell', label: 'DSH_SHELL_EFFECTIVE unset -> powershell (safe default)' },
+  { env: { DSH_SHELL_EFFECTIVE: 'bash' }, want: 'bash', label: 'EFFECTIVE=bash' },
+  { env: { DSH_SHELL_EFFECTIVE: 'powershell' }, want: 'powershell', label: 'EFFECTIVE=powershell' },
+  { env: { DSH_SHELL_EFFECTIVE: 'pwsh' }, want: 'powershell', label: 'EFFECTIVE=pwsh' },
 ];
 
 for (const s of scenarios) {

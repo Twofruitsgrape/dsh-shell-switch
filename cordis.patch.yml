@@ -3,34 +3,45 @@
 # The shipped base bundle gates the two shell stacks purely by platform:
 #   bash-sandbox / tool-bash  -> disabled: !!js process.platform === 'win32'
 #   pwsh-sandbox / tool-pwsh  -> disabled: !!js process.platform !== 'win32'
-# so a Windows host always gets PowerShell and can never reach bash through
-# configuration alone.
+# so a Windows host always gets PowerShell with no configuration knob.
 #
-# This patch overrides all four rows with an env-driven expression instead.
-# Because the switch must flip BOTH rows of each stack at once, both members
-# of a stack read the same expression: a partial switch makes the profile fail
-# to load.
+# This bundle overrides all four rows. The decision is not computed here: the
+# bundle module (index.js) probes the machine for a bash executable, injects
+# Git Bash's `bin` directory into PATH when needed, and publishes the resolved
+# stack as DSH_SHELL_EFFECTIVE ('bash' | 'powershell'). Reading that variable
+# keeps these rows a plain string comparison, and keeps filesystem access out
+# of the loader's expression evaluator.
 #
-# Usage — set one environment variable before launching DeepSeek Harness:
-#   DSH_SHELL=bash        (default) Bash executor + bash tool
-#   DSH_SHELL=powershell  PowerShell executor + pwsh tool
-# Values are case-insensitive; `pwsh` is accepted as an alias.
+# Usage (all optional):
+#   DSH_SHELL=auto         Windows: bash when one exists, else PowerShell.
+#                          POSIX: bash.   <- default
+#   DSH_SHELL=bash         force bash (falls back to PowerShell if none found)
+#   DSH_SHELL=powershell   force PowerShell  (alias: pwsh)
+#   DSH_SHELL_AUTOCONFIG=0 keep PATH untouched
+#
+# Both rows of a stack read the same expression: a partial switch makes the
+# profile fail to load, so the pair must never disagree.
 
-- id: pwsh-sandbox
-  name: '@deepseek-ai/dsh-pwsh-sandbox'
-  disabled: !!js (process.env.DSH_SHELL ?? 'bash').toLowerCase() === 'bash'
+- insert:
+    - id: shell-switch
+      name: 'dsh-shell-switch'
+      config: {}
 
-- id: tool-pwsh
-  name: '@deepseek-ai/dsh-tool-pwsh'
-  disabled: !!js (process.env.DSH_SHELL ?? 'bash').toLowerCase() === 'bash'
+    - id: pwsh-sandbox
+      name: '@deepseek-ai/dsh-pwsh-sandbox'
+      disabled: !!js (process.env.DSH_SHELL_EFFECTIVE ?? 'powershell').toLowerCase() === 'bash'
 
-- id: bash-sandbox
-  name: '@deepseek-ai/dsh-bash-sandbox'
-  disabled: !!js (process.env.DSH_SHELL ?? 'bash').toLowerCase() !== 'bash'
-  config:
-    timeoutMs: 120000
-    maxTimeoutMs: 600000
+    - id: tool-pwsh
+      name: '@deepseek-ai/dsh-tool-pwsh'
+      disabled: !!js (process.env.DSH_SHELL_EFFECTIVE ?? 'powershell').toLowerCase() === 'bash'
 
-- id: tool-bash
-  name: '@deepseek-ai/dsh-tool-bash'
-  disabled: !!js (process.env.DSH_SHELL ?? 'bash').toLowerCase() !== 'bash'
+    - id: bash-sandbox
+      name: '@deepseek-ai/dsh-bash-sandbox'
+      disabled: !!js (process.env.DSH_SHELL_EFFECTIVE ?? 'powershell').toLowerCase() !== 'bash'
+      config:
+        timeoutMs: 120000
+        maxTimeoutMs: 600000
+
+    - id: tool-bash
+      name: '@deepseek-ai/dsh-tool-bash'
+      disabled: !!js (process.env.DSH_SHELL_EFFECTIVE ?? 'powershell').toLowerCase() !== 'bash'

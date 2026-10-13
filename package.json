@@ -4,6 +4,18 @@
   "description": "Switch DeepSeek Harness between the PowerShell and Bash shell stacks on Windows via a single config flag. · 用一个开关在 DeepSeek Harness 里切换 PowerShell / Bash。",
   "private": true,
   "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "src",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -33,7 +45,7 @@
     "dsh": ">=0.2.0-rc.2"
   },
   "scripts": {
-    "test": "node test/shell-switch.test.mjs && node test/composition.test.mjs"
+    "test": "node test/shell-switch.test.mjs && node test/composition.test.mjs && node test/detect.test.mjs && node test/integration.test.mjs"
   },
   "devDependencies": {
     "js-yaml": "^5.4.3"
