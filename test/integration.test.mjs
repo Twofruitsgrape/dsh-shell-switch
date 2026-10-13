@@ -36,7 +36,7 @@ function patchBodies() {
     const i = src.findIndex((l) => new RegExp(`^\\s*-?\\s*id:\\s*${id}\\s*$`).test(l));
     for (let j = i + 1; j < i + 8; j++) {
       const m = src[j].match(/^\s*disabled:\s*!!js\s+(.+?)\r?$/);
-      if (m) return m[1].trim();
+      if (m) return m[1].trim().replace(/^['"]|['"]$/g, '');
     }
     throw new Error('no body for ' + id);
   };

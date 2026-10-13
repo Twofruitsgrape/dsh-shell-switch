@@ -62,7 +62,7 @@ function rawJsBody(id, field = 'disabled') {
   for (let i = rowStart + 1; i < rowStart + 8 && i < lines.length; i++) {
     // Tolerate CRLF: Git may check the patch out with CRLF endings on Windows.
     const m = lines[i].match(new RegExp(`^\\s*${field}:\\s*!!js\\s+(.+?)\\r?$`));
-    if (m) return m[1].trim();
+    if (m) return m[1].trim().replace(/^['"]|['"]$/g, '');
   }
   throw new Error(`!!js ${field} not found for row: ${id}`);
 }
@@ -115,6 +115,11 @@ const scenarios = [
   { env: { DSH_SHELL_EFFECTIVE: 'powershell' }, want: 'powershell', label: 'EFFECTIVE=powershell -> powershell' },
   { env: { DSH_SHELL_EFFECTIVE: 'PWSH' }, want: 'powershell', label: 'EFFECTIVE=PWSH -> powershell' },
   { env: {}, want: 'powershell', label: 'EFFECTIVE unset -> powershell (safe default)' },
+  // Fallback paths used when the bundle module is not invoked: direct DSH_SHELL
+  // and DSH_BASH_DIR still resolve, so the shell never silently disappears.
+  { env: { DSH_SHELL: 'bash' }, want: 'bash', label: 'fallback: DSH_SHELL=bash' },
+  { env: { DSH_SHELL: 'powershell' }, want: 'powershell', label: 'fallback: DSH_SHELL=powershell' },
+  { env: { DSH_BASH_DIR: 'C:\\Program Files\\Git\\bin' }, want: 'bash', label: 'fallback: DSH_BASH_DIR set -> bash' },
 ];
 
 for (const s of scenarios) {

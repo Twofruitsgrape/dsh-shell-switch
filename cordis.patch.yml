@@ -5,19 +5,26 @@
 #   pwsh-sandbox / tool-pwsh  -> disabled: !!js process.platform !== 'win32'
 # so a Windows host always gets PowerShell with no configuration knob.
 #
-# This bundle overrides all four rows. The decision is not computed here: the
-# bundle module (index.js) probes the machine for a bash executable, injects
-# Git Bash's `bin` directory into PATH when needed, and publishes the resolved
-# stack as DSH_SHELL_EFFECTIVE ('bash' | 'powershell'). Reading that variable
-# keeps these rows a plain string comparison, and keeps filesystem access out
-# of the loader's expression evaluator.
+# This bundle overrides all four rows. The preferred signal is DSH_SHELL_EFFECTIVE,
+# published by the bundle module (index.js) *before* this patch is interpolated:
+# it validates DSH_BASH_DIR / DSH_SHELL, injects Git Bash's bin dir into PATH,
+# and writes the resolved stack ('bash' | 'powershell'). Filesystem access thus
+# lives in a real module, not a one-line !!js expression.
+#
+# For robustness the expression also falls back directly to DSH_SHELL / DSH_BASH_DIR
+# when the module is not invoked, so the shell never silently disappears.
+#
+# Resolution order (first that applies):
+#   DSH_SHELL_EFFECTIVE  (module output)   -> 'bash' | 'powershell'
+#   DSH_SHELL            bash | powershell | pwsh
+#   DSH_BASH_DIR set     -> bash (module also validates/injects when present)
+#   default              win32 -> powershell, posix -> bash
 #
 # Usage (all optional):
-#   DSH_SHELL=auto         Windows: bash when one exists, else PowerShell.
-#                          POSIX: bash.   <- default
-#   DSH_SHELL=bash         force bash (falls back to PowerShell if none found)
-#   DSH_SHELL=powershell   force PowerShell  (alias: pwsh)
-#   DSH_SHELL_AUTOCONFIG=0 keep PATH untouched
+#   DSH_BASH_DIR="C:\Program Files\Git\bin"   point at Git Bash; validated + used
+#   DSH_SHELL=bash                                 force bash
+#   DSH_SHELL=powershell | pwsh                    force PowerShell (switch back)
+#   DSH_SHELL_AUTOCONFIG=0                         keep PATH untouched
 #
 # Both rows of a stack read the same expression: a partial switch makes the
 # profile fail to load, so the pair must never disagree.
@@ -29,19 +36,19 @@
 
     - id: pwsh-sandbox
       name: '@deepseek-ai/dsh-pwsh-sandbox'
-      disabled: !!js (process.env.DSH_SHELL_EFFECTIVE ?? 'powershell').toLowerCase() === 'bash'
+      disabled: !!js '(process.env.DSH_SHELL_EFFECTIVE ?? process.env.DSH_SHELL ?? (process.env.DSH_BASH_DIR ? "bash" : (process.platform === "win32" ? "powershell" : "bash"))).toLowerCase() === "bash"'
 
     - id: tool-pwsh
       name: '@deepseek-ai/dsh-tool-pwsh'
-      disabled: !!js (process.env.DSH_SHELL_EFFECTIVE ?? 'powershell').toLowerCase() === 'bash'
+      disabled: !!js '(process.env.DSH_SHELL_EFFECTIVE ?? process.env.DSH_SHELL ?? (process.env.DSH_BASH_DIR ? "bash" : (process.platform === "win32" ? "powershell" : "bash"))).toLowerCase() === "bash"'
 
     - id: bash-sandbox
       name: '@deepseek-ai/dsh-bash-sandbox'
-      disabled: !!js (process.env.DSH_SHELL_EFFECTIVE ?? 'powershell').toLowerCase() !== 'bash'
+      disabled: !!js '(process.env.DSH_SHELL_EFFECTIVE ?? process.env.DSH_SHELL ?? (process.env.DSH_BASH_DIR ? "bash" : (process.platform === "win32" ? "powershell" : "bash"))).toLowerCase() !== "bash"'
       config:
         timeoutMs: 120000
         maxTimeoutMs: 600000
 
     - id: tool-bash
       name: '@deepseek-ai/dsh-tool-bash'
-      disabled: !!js (process.env.DSH_SHELL_EFFECTIVE ?? 'powershell').toLowerCase() !== 'bash'
+      disabled: !!js '(process.env.DSH_SHELL_EFFECTIVE ?? process.env.DSH_SHELL ?? (process.env.DSH_BASH_DIR ? "bash" : (process.platform === "win32" ? "powershell" : "bash"))).toLowerCase() !== "bash"'
